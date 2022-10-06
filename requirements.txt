@@ -1,5 +1,6 @@
-torch
-torchvision
+#torch
+#torchvision
+#timm
 einops
 h5py
 numpy
@@ -10,5 +11,4 @@ seaborn
 scipy
 cython
 pycocotools
-timm
 albumentations

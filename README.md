@@ -22,7 +22,9 @@ conda activate deformable_potr
 Then install all the dependencies using:
 
 ```bash
-conda install pytorch=1.5.1 torchvision=0.6.1 cudatoolkit=9.2 -c pytorch
+conda install pytorch torchvision cudatoolkit=11.3 -c pytorch
+conda install timm -c conda-forge
+conda install cudatoolkit-dev -c conda-forge
 pip install -r requirements.txt
 ```
 

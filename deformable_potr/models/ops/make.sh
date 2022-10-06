@@ -6,5 +6,5 @@
 # ------------------------------------------------------------------------------------------------
 # Modified from https://github.com/chengdazhi/Deformable-Convolution-V2-PyTorch/tree/pytorch_1.0.0
 # ------------------------------------------------------------------------------------------------
-
+set -x CUDA_HOME /home/zitkat/miniconda3/envs/deformable_potr/pkgs/cuda-toolkit/
 python setup.py build install
