@@ -21,6 +21,8 @@ from potr_base.models.transformer import build_transformer
 
 from dataset.hpoes_dataset import HPOESOberwegerDataset
 
+from explain.probes import ActivationProbe
+
 
 # Arguments
 parser = argparse.ArgumentParser("POTR HPOES Standalone Annotations Script", add_help=False)
@@ -52,6 +54,8 @@ model.load_state_dict(checkpoint["model"])
 model.eval()
 model.to(device)
 
+probe = ActivationProbe(model, activation_recording_mode="output").activation_recording(True)
+
 print("Constructed model successfully.")
 
 dataset_test = HPOESOberwegerDataset(args.input_file, encoded=True, mode='test')
@@ -64,6 +68,8 @@ for i, (samples) in enumerate(data_loader):
 
     results = model(samples).detach().cpu().numpy()
     output_list.extend(results)
+
+    attentions = probe.attentions
 
 print("Predictions were made.")
 
