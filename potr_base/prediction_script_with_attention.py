@@ -70,6 +70,9 @@ for i, (samples) in enumerate(data_loader):
     output_list.extend(results)
 
     attentions = probe.attentions
+    cross_attention_keys = [f'transformer-decoder-layers-{ii}-multihead_attn' for ii in range(6)]
+    cross_attentios = {name: attentions[name][0].reshape((1, 21, 7, 7)) for name in cross_attention_keys}
+
 
 print("Predictions were made.")
 
