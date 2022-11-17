@@ -6,7 +6,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.14.0
+#       jupytext_version: 1.14.1
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
@@ -42,6 +42,8 @@ from deformable_potr.models.deformable_potr import DeformablePOTR
 from deformable_potr.models.backbone import build_backbone
 from deformable_potr.models.deformable_transformer import build_deformable_transformer
 
+from deformable_potr.util.misc import make_path
+
 from dataset.hpoes_dataset import HPOESOberwegerDataset
 
 from explain.probes import ActivationProbe
@@ -56,7 +58,7 @@ class Args:
 args = Args()
 args.weights_file = Path("../.checkpoints/deformable_port/NYU_comrefV2V_3Dproj52_checkpoint_best.pth")
 args.input_file = Path("../.data/test_1_comrefV2V_3Dproj.h5")
-args.output_file = Path("out.h5")
+args.output_file = Path("out_vis.h5")
 args.device = "cuda"
 args.batch_size = 1
 
@@ -94,7 +96,6 @@ dataset_test = HPOESOberwegerDataset(args.input_file, encoded=True, mode='eval')
 data_loader = DataLoader(dataset_test, batch_size=args.batch_size, num_workers=0, shuffle=False)
 
 # %%
-# Iterate over the depth maps and structure the predictions
 for i, (samples) in enumerate(list(data_loader)[2:]):
     depth_map, label = samples
     print(i)
@@ -149,7 +150,7 @@ probe.output_activations["transformer-encoder"].shape
 
 # %%
 N = 1  # batch size
-Len_q = 14  # number of queries, in cross attention module this is number keypoints
+Len_q = 14  # number of queries, in cross attention module this is number of keypoints
 n_heads = 8  # attention heads
 n_levels = 4  # feature pyramid levels
 n_points = 4  # reference points
@@ -256,7 +257,7 @@ img_data.shape
 # %% [markdown]
 # ### Keypoint and finger connectivity and names
 
-# %% jupyter={"source_hidden": true} tags=[]
+# %% tags=[] jupyter={"source_hidden": true}
 keypoint_names = {0: "little_0",
                   1: "little_1",
                   2: "ring_0",
@@ -325,24 +326,26 @@ def plot_skeleton(joints, style, linewidth = 2.0):
         plt.plot(finger[:, 0], finger[:, 1], linestyle=style, color=finger_cols[fid], linewidth = linewidth)
 
 def plot_points(joints, style):
-    plt.scatter(joints[0, :, 0], joints[0, :, 1], facecolors=list(keypoint_colors.values()), marker=style)
+    plt.scatter(joints[:, 0], joints[:, 1], facecolors=list(keypoint_colors.values()), marker=style)
 
 
 # %%
 keypoint = "little_0"
+sample_id = 0
 
 # %%
 keypoint_idx = keypoint_idxs[keypoint]
 plt.imshow(img_data)
-plot_points(aresults, "o")
+plot_points(aresults[0], "o")
 plot_skeleton(aresults[0], "-")
-plot_points(alabel, ".")
+plot_points(alabel[0], ".")
 plt.plot(aresults[0, keypoint_idx, 0], aresults[0, keypoint_idx, 1], marker=".")
 for head in range(8):
     plt.scatter(asampling_locations[keypoint_idx, head, :,:, 0].flatten(), 
                 asampling_locations[keypoint_idx, head, :,:, 1].flatten(), 
                 sizes=50*attention_weights[0, keypoint_idx, head, :].cpu().numpy().flatten(),
                 marker="o", facecolors='None', edgecolors=keypoint_colors[keypoint])
+plt.savefig(make_path("output", str(sample_id), f"{layer}_{keypoint}.png"), bbox_inches="tight", dpi=400)
 
 # %% [markdown]
 # $\Delta p_{mqk} \in R^2$ are of 2-d real numbers with

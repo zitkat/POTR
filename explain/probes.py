@@ -13,6 +13,7 @@ import toolz
 import torch
 from torch import nn
 
+from deformable_potr.models.ops.modules import MSDeformAttn
 from .utils.model_util import iterate_renderable_layers, build_layers_dict
 
 
@@ -54,6 +55,7 @@ class ActivationProbe(nn.Module):
         self.output_activations: OrderedDict[torch.Tensor] = OrderedDict()
         self.input_activations: OrderedDict[torch.Tensor] = OrderedDict()
         self.attentions: OrderedDict[torch.Tensor] = OrderedDict()
+        self.sampling_locations: OrderedDict[torch.Tensor] = OrderedDict()
         self.record_activations = False
 
         for name, layer in self.layers.items():
@@ -124,6 +126,10 @@ class ActivationProbe(nn.Module):
                     if isinstance(model, nn.modules.MultiheadAttention):
                         model_output, attention = model_output
                         self.attentions.setdefault(name, []).append(attention.detach())
+                    elif isinstance(model, MSDeformAttn):
+                        model_outpout, sampling_locations, attention_weights = model_output
+                        self.attentions.setdefault(name, []).append(attention_weights.detach())
+                        self.sampling_locations.setdefault(name, []).append(sampling_locations.detach())
                     elif isinstance(model_output, tuple):
                         print(f"Skip tuple {name}")
                     elif isinstance(model_output, list):
