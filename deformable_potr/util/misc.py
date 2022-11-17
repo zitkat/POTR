@@ -19,6 +19,7 @@ from collections import defaultdict, deque
 import datetime
 import pickle
 from typing import Optional, List
+from pathlib import Path
 
 import torch
 import torch.nn as nn
@@ -519,3 +520,17 @@ def inverse_sigmoid(x, eps=1e-5):
     x1 = x.clamp(min=eps)
     x2 = (1 - x).clamp(min=eps)
     return torch.log(x1 / x2)
+
+
+
+def make_path(*pathargs, isdir=False, **pathkwargs):
+    new_path = Path(*pathargs, **pathkwargs)
+    return ensured_path(new_path, isdir=isdir)
+
+
+def ensured_path(path: Path, isdir=False):
+    if isdir:
+        path.mkdir(parents=True, exist_ok=True)
+    else:
+        path.parent.mkdir(parents=True, exist_ok=True)
+    return path
