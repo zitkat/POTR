@@ -28,6 +28,7 @@ class ActivationProbe(nn.Module):
     activation_recording_modes = ["both", "input", "output"]
 
     def __init__(self, model: nn.Module,
+                 verbose: bool = True,
                  activation_recording_mode: str = "both",
                  single_layer_activation_recording: str = None):
         """
@@ -37,6 +38,7 @@ class ActivationProbe(nn.Module):
         """
 
         super(ActivationProbe, self).__init__()
+        self.verbose = verbose
         self.module = model
         self.layers: OrderedDict[torch.nn.Module] = build_layers_dict(self.module)
 
@@ -113,6 +115,14 @@ class ActivationProbe(nn.Module):
         self.attentions = OrderedDict()
         return self
 
+    def silence(self: T) -> T:
+        self.verbose = False
+        return self
+
+    def verbose(self: T, val: bool) -> T:
+        self.verbose = val
+        return self
+
     def _get_activation_hook(self: T, name):
 
         def hook(model, model_input, model_output):
@@ -131,12 +141,12 @@ class ActivationProbe(nn.Module):
                         self.attentions.setdefault(name, []).append(attention_weights.detach())
                         self.sampling_locations.setdefault(name, []).append(sampling_locations.detach())
                     elif isinstance(model_output, tuple):
-                        print(f"Skip tuple {name}")
+                        if self.verbose: print(f"Skip tuple {name}")
                     elif isinstance(model_output, list):
                         self.output_activations[name] = [o.detach() for o in model_output]
                     elif isinstance(model_output, dict):
                         # self.output_activations[name] = toolz.valmap(toolz.partial(map, torch.detach), model_output)
-                        print(f"Skip dict {name}")
+                        if self.verbose: print(f"Skip dict {name}")
                     else:
                         self.output_activations[name] = model_output.detach()
 
