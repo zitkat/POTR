@@ -186,7 +186,7 @@ def create_rows(sample_id, attentions, recorded_sampling_locations):
     for layer_id, layer in enumerate(filter(lambda k: "cross" in k, attentions)):
         rows += [AttRow(sample_id, layer_id, keypoint, head, level, point, 
                      recorded_sampling_locations[layer][-1][0, keypoint, head, level, point, 0].item(),
-                     recorded_sampling_locations[layer][-1][0, keypoint, head, level, point, 1].item(),
+                     recorded_sampling_locations[layer][-1][0, keypoint, head, level, point, 1].item() * (-1) + 1,
                      attentions[layer][-1][0,keypoint, head, level, point].item()) 
                  for keypoint, head, level, point in 
                  product(keypoint_names.keys(), range(n_heads), range(n_levels), range(n_points))
@@ -197,9 +197,9 @@ def create_rows(sample_id, attentions, recorded_sampling_locations):
 # %%
 att_rows = []
 pred_rows = []
-for i, (samples) in enumerate(list(data_loader)[2:]):
+probe.silence()
+for i, (samples) in enumerate(list(data_loader)):
     depth_map, label = samples
-    print(i)
     depth_map = depth_map.to(device, dtype=torch.float32)
 
     results = model(depth_map).detach().cpu().numpy()
@@ -207,15 +207,28 @@ for i, (samples) in enumerate(list(data_loader)[2:]):
     attentions = probe.attentions  
     recorded_sampling_locations = probe.sampling_locations
     
-    att_rows += create_rows(i, attentions, recorded_sampling_locations)
-    pred_rows += [PredRow(i, keypoint, *results[0, keypoint], 
-                                       *label.cpu().numpy()[0, keypoint],
-                                      np.linalg.norm(results[0, keypoint] - label.cpu().numpy()[0, keypoint])
-                         ) for keypoint in keypoint_names.keys()]
+    errs = [np.linalg.norm(results[0, keypoint] - label.cpu().numpy()[0, keypoint]) for keypoint in keypoint_names.keys()]
     
-    break
+    
+    
+    print(f"{i} Max error {np.max(errs)}")
+    
+    if 1 > 0.1:
+        att_rows = create_rows(i, attentions, recorded_sampling_locations)
+        pred_rows = [PredRow(i, keypoint, 
+                             *((results[0, keypoint] * np.array([1, -1, 1]) + 1) / 2), 
+                             *((label.cpu().numpy()[0, keypoint]* np.array([1, -1, 1]) + 1) / 2),
+                                      err)
+                         for keypoint, err in zip(keypoint_names.keys(), errs)]
+        img_data = depth_map.cpu().numpy().transpose((2, 3, 1, 0))[..., 0]
+        img_data = (img_data - img_data.min()) / np.abs(img_data.max() - img_data.min())
+        break
+    
 att_df = pd.DataFrame(att_rows)
 pred_df = pd.DataFrame(pred_rows)
+
+att_df["dist"] = np.linalg.norm(att_df[["x", "y"]] - np.array([0.5, 0.5]), axis=1)
+att_df = att_df.merge(pred_df, on="keypoint")
 
 # %%
 decoder_reference_points = probe.output_activations["transformer-reference_points"].cpu()
@@ -230,20 +243,13 @@ decoder_reference_points = decoder_reference_points.detach().cpu().numpy()
 pred_df
 
 # %%
-att_df["dist"] = np.linalg.norm(att_df[["x", "y"]] - np.array([0.5, 0.5]), axis=1)
-
-# %%
-att_df = att_df.merge(pred_df, on="keypoint")
-
-# %%
-att_df.plot(kind="scatter", x="dist", y="attention")
+plt.figure(figsize=(20, 15))
+plt.imshow(img_data, extent=(0,1, 0, 1))
+sns.scatterplot(data=att_df, x="x", y="y", hue="layer", size="attention", alpha=.7)
+plt.plot([0, 0, 1,1, 0], [0, 1, 1, 0, 0], color="red")
 
 # %%
 sns.scatterplot(data=att_df, x="dist", y="attention", hue="layer")
-
-# %%
-plt.figure(figsize=(20, 15))
-sns.scatterplot(data=att_df, x="x", y="y", hue="layer", size="attention")
 
 # %%
 sns.scatterplot(data=att_df, x="dist", y="attention", hue="level")
@@ -252,34 +258,78 @@ sns.scatterplot(data=att_df, x="dist", y="attention", hue="level")
 sns.scatterplot(data=att_df, x="dist", y="attention", hue="err")
 
 # %%
-df = att_df
+df = att_df.copy()
 df["keypoint"] = df["keypoint"].map(keypoint_names)
 for l in range(6):
     fig = plt.figure(figsize=(25, 6))    
     ax1, ax2, ax3, ax4 = fig.subplots(1, 4)
+    
     ax1.set_title(f"Layer {l}: attention vs dist")
     sns.scatterplot(data=df[df["layer"] == l], x="dist", y="attention", ax=ax1)
+    
+    
     ax2.set_title(f"sampling points distribution vs attenion")
     sns.scatterplot(data=df[df["layer"] == l], x="x", y="y", hue="attention", ax=ax2)
     ax2.plot([0, 0, 1,1, 0], [0, 1, 1, 0, 0], color="red")
+    
     ax3.set_title(f"sampling points distribution vs level")
     sns.scatterplot(data=df[df["layer"] == l], x="x", y="y", hue="level", ax=ax3)
     ax3.plot([0, 0, 1,1, 0], [0, 1, 1, 0, 0], color="red")
-    sns.scatterplot(data=df[df["layer"] == l], x="x", y="y", hue="keypoint", palette="tab20", ax=ax4)
+    ax3.set_title(f"sampling points distribution vs level")
+    sns.scatterplot(data=df[df["layer"] == l], x="x", y="y", hue="keypoint", ax=ax4)
     ax4.plot([0, 0, 1,1, 0], [0, 1, 1, 0, 0], color="red")
 
-# %%
+# %% jupyter={"outputs_hidden": true, "source_hidden": true} tags=[]
 df = att_df[att_df["keypoint"] == keypoint_idxs["little_0"]]
 for l in range(6):
     fig = plt.figure(figsize=(20, 6))    
     ax1, ax2, ax3 = fig.subplots(1, 3)
+    
     ax1.set_title(f"Layer {l}: attention vs dist")
     sns.scatterplot(data=df[df["layer"] == l], x="dist", y="attention", ax=ax1)
+    
     ax2.set_title(f"sampling points distribution vs attenion")
+    ax2.imshow(img_data, extent=(0,1, 0, 1))
     sns.scatterplot(data=df[df["layer"] == l], x="x", y="y", hue="attention", ax=ax2)
+    ax2.plot(df["px"].iloc[0], df["py"].iloc[0], marker="o", color="red")
+    ax2.plot(df["lx"].iloc[0], df["ly"].iloc[0], marker="o", color="blue")
     ax2.plot([0, 0, 1,1, 0], [0, 1, 1, 0, 0], color="red")
+    
     ax3.set_title(f"sampling points distribution vs level")
-    sns.scatterplot(data=df[df["layer"] == l], x="x", y="y", hue="level", ax=ax3)
+    ax3.imshow(img_data, extent=(0,1, 0, 1))
+    sns.scatterplot(data=df[df["layer"] == l], x="x", y="y", hue="level", size="attention", ax=ax3)
+    ax3.plot(df["px"].iloc[0], df["py"].iloc[0], marker="o", color="red")
+    ax3.plot(df["lx"].iloc[0], df["ly"].iloc[0], marker="o", color="blue")
     ax3.plot([0, 0, 1,1, 0], [0, 1, 1, 0, 0], color="red")
+
+# %%
+for idx, name in keypoint_names.items():
+    df = att_df[(att_df["keypoint"] == idx) & (att_df["level"] == 0)]
+    fig = plt.figure(figsize=(26, 4))    
+    axs = fig.subplots(1, 6)
+    for l in range(6):
+        axs[l].set_title(f"{name}, layer {l}")
+        sns.scatterplot(data=df[df["layer"] == l], 
+                        x="x", 
+                        y="y", 
+                        hue="head", 
+                        size="attention", ax=axs[l], legend=False)
+        axs[l].imshow(img_data, extent=(0,1, 0, 1))
+        axs[l].plot(df["px"].iloc[0], df["py"].iloc[0], marker="o", color="red")
+        axs[l].plot(df["lx"].iloc[0], df["ly"].iloc[0], marker="o", color="blue")
+        axs[l].plot([0, 0, 1,1, 0], [0, 1, 1, 0, 0], color="red")  
+
+# %%
+for idx, name in keypoint_names.items():
+    df = att_df[(att_df["keypoint"] == idx) & (att_df["level"] == 2)]
+    fig = plt.figure(figsize=(26, 4))    
+    axs = fig.subplots(1, 6)
+    for l in range(6):
+        axs[l].set_title(f"{name}, layer {l}")
+        sns.scatterplot(data=df[df["layer"] == l], x="x", y="y", hue="head", size="attention", ax=axs[l], legend=False)
+        axs[l].imshow(img_data, extent=(0,1, 0, 1))
+        axs[l].plot(df["px"].iloc[0], df["py"].iloc[0], marker="o", color="red")
+        axs[l].plot(df["lx"].iloc[0], df["ly"].iloc[0], marker="o", color="blue")
+        axs[l].plot([0, 0, 1,1, 0], [0, 1, 1, 0, 0], color="red") 
 
 # %%
